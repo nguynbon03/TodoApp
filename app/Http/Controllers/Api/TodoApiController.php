@@ -13,36 +13,51 @@ use App\Http\Requests\Todos\UpdateTodoRequest;
 use App\Http\Resources\TodoResource;
 use App\Models\Todo;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class TodoApiController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    /**
+     * GET /api/todos — Lấy danh sách công việc (mới nhất xếp trước).
+     */
+    public function index(): AnonymousResourceCollection
     {
-        $todos = $request->user()->todos()->latest()->get();
+        $todos = Todo::query()->latest()->get();
 
         return TodoResource::collection($todos);
     }
 
+    /**
+     * POST /api/todos — Tạo công việc mới (Validate qua StoreTodoRequest -> Lưu DB qua CreateTodo -> Trả JSON 201 qua TodoResource).
+     */
     public function store(StoreTodoRequest $request, CreateTodo $createTodo): JsonResponse
     {
-        $todo = $createTodo->handle($request->user(), $request->validated('title'));
+        /** @var string $title */
+        $title = $request->validated('title');
+
+        $todo = $createTodo->handle($title);
 
         return (new TodoResource($todo))->response()->setStatusCode(201);
     }
 
+    /**
+     * PATCH /api/todos/{todo} — Cập nhật trạng thái hoàn thành hoặc tiêu đề (Validate qua UpdateTodoRequest).
+     */
     public function update(UpdateTodoRequest $request, Todo $todo, UpdateTodo $updateTodo): TodoResource
     {
-        $updated = $updateTodo->handle($todo, $request->validated());
+        /** @var array{title?: string, completed?: bool} $validated */
+        $validated = $request->validated();
+
+        $updated = $updateTodo->handle($todo, $validated);
 
         return new TodoResource($updated);
     }
 
-    public function destroy(Request $request, Todo $todo, DeleteTodo $deleteTodo): JsonResponse
+    /**
+     * DELETE /api/todos/{todo} — Xóa công việc qua DeleteTodo.
+     */
+    public function destroy(Todo $todo, DeleteTodo $deleteTodo): JsonResponse
     {
-        abort_if($todo->user_id !== $request->user()?->id, 403);
-
         $deleteTodo->handle($todo);
 
         return response()->json(['message' => 'Đã xóa công việc thành công.']);

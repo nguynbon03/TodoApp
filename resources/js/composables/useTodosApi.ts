@@ -30,14 +30,20 @@ export function useTodosApi(initialTodos: TodoItem[] = []) {
     const lastApiCall = ref<string>('GET /api/todos (Khởi tạo)');
 
     const totalCount = computed(() => todos.value.length);
-    const completedCount = computed(() => todos.value.filter((t) => t.completed).length);
+    const completedCount = computed(
+        () => todos.value.filter((t) => t.completed).length,
+    );
     const activeCount = computed(() => totalCount.value - completedCount.value);
     const completionPercent = computed(() =>
-        totalCount.value === 0 ? 0 : Math.round((completedCount.value / totalCount.value) * 100),
+        totalCount.value === 0
+            ? 0
+            : Math.round((completedCount.value / totalCount.value) * 100),
     );
     const filteredTodos = computed(() => {
-        if (filter.value === 'active') return todos.value.filter((t) => !t.completed);
-        if (filter.value === 'completed') return todos.value.filter((t) => t.completed);
+        if (filter.value === 'active')
+            return todos.value.filter((t) => !t.completed);
+        if (filter.value === 'completed')
+            return todos.value.filter((t) => t.completed);
         return todos.value;
     });
 
@@ -64,7 +70,9 @@ export function useTodosApi(initialTodos: TodoItem[] = []) {
         submitting.value = true;
         errorMessage.value = null;
         try {
-            const res = await apiClient.post<{ data: TodoItem }>('/todos', { title: trimmed });
+            const res = await apiClient.post<{ data: TodoItem }>('/todos', {
+                title: trimmed,
+            });
             todos.value.unshift(res.data.data);
             lastApiCall.value = 'POST /api/todos → 201 Created';
             return true;
@@ -80,9 +88,12 @@ export function useTodosApi(initialTodos: TodoItem[] = []) {
         busyId.value = todo.id;
         errorMessage.value = null;
         try {
-            const res = await apiClient.patch<{ data: TodoItem }>(`/todos/${todo.id}`, {
-                completed: !todo.completed,
-            });
+            const res = await apiClient.patch<{ data: TodoItem }>(
+                `/todos/${todo.id}`,
+                {
+                    completed: !todo.completed,
+                },
+            );
             const idx = todos.value.findIndex((t) => t.id === todo.id);
             if (idx !== -1) todos.value[idx] = res.data.data;
             lastApiCall.value = `PATCH /api/todos/${todo.id} → 200 OK`;
@@ -93,7 +104,10 @@ export function useTodosApi(initialTodos: TodoItem[] = []) {
         }
     }
 
-    async function updateTodoTitle(todo: TodoItem, title: string): Promise<boolean> {
+    async function updateTodoTitle(
+        todo: TodoItem,
+        title: string,
+    ): Promise<boolean> {
         const trimmed = title.trim();
         if (!trimmed) {
             errorMessage.value = 'Tiêu đề công việc không được để trống.';
@@ -102,9 +116,12 @@ export function useTodosApi(initialTodos: TodoItem[] = []) {
         busyId.value = todo.id;
         errorMessage.value = null;
         try {
-            const res = await apiClient.patch<{ data: TodoItem }>(`/todos/${todo.id}`, {
-                title: trimmed,
-            });
+            const res = await apiClient.patch<{ data: TodoItem }>(
+                `/todos/${todo.id}`,
+                {
+                    title: trimmed,
+                },
+            );
             const idx = todos.value.findIndex((t) => t.id === todo.id);
             if (idx !== -1) todos.value[idx] = res.data.data;
             lastApiCall.value = `PATCH /api/todos/${todo.id} → 200 OK`;

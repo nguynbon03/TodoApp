@@ -3,16 +3,15 @@
 namespace App\Actions\Todos;
 
 use App\Models\Todo;
-use App\Models\User;
 
 class CreateTodo
 {
     /**
-     * Create a new todo item for the given user.
+     * Create a new todo item.
      */
-    public function handle(User $user, string $title): Todo
+    public function handle(string $title): Todo
     {
-        return $user->todos()->create([
+        return Todo::query()->create([
             'title' => trim($title),
             'completed' => false,
         ]);

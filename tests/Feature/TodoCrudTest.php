@@ -1,153 +1,145 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Models\Todo;
-use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
-test('authenticated user sees only their own todos on the dashboard', function () {
-    $user = User::factory()->create();
-    $otherUser = User::factory()->create();
+test('GET / renders the standalone Dashboard page with initial todos', function () {
+    $todo = Todo::factory()->create([
+        'title' => 'Viết code Laravel 13 chuẩn Clean Architecture',
+        'completed' => false,
+    ]);
 
-    $myTodo = Todo::factory()->for($user)->create(['title' => 'Viết code Laravel chuẩn']);
-    Todo::factory()->for($otherUser)->create(['title' => 'Việc của người khác']);
-
-    $response = $this
-        ->actingAs($user)
-        ->get(route('dashboard', ['current_team' => $user->currentTeam]));
+    $response = $this->get('/');
 
     $response->assertOk();
     $response->assertInertia(fn (Assert $page) => $page
         ->component('Dashboard')
         ->has('todos', 1)
-        ->where('todos.0.id', $myTodo->id)
-        ->where('todos.0.title', 'Viết code Laravel chuẩn')
+        ->where('todos.0.id', $todo->id)
+        ->where('todos.0.title', 'Viết code Laravel 13 chuẩn Clean Architecture')
         ->where('todos.0.completed', false),
     );
 });
 
-test('authenticated user can create a todo item', function () {
-    $user = User::factory()->create();
+test('GET /dashboard renders the standalone Dashboard page with todos ordered latest first', function () {
+    $olderTodo = Todo::factory()->create([
+        'title' => 'Việc cũ hơn',
+        'completed' => true,
+        'created_at' => now()->subMinutes(10),
+    ]);
+    $newerTodo = Todo::factory()->create([
+        'title' => 'Việc mới nhất',
+        'completed' => false,
+        'created_at' => now(),
+    ]);
 
-    $response = $this
-        ->actingAs($user)
-        ->from(route('dashboard'))
-        ->post(route('todos.store'), [
-            'title' => '  Học Vue 3 + Inertia v3  ',
+    $response = $this->get(route('dashboard'));
+
+    $response->assertOk();
+    $response->assertInertia(fn (Assert $page) => $page
+        ->component('Dashboard')
+        ->has('todos', 2)
+        ->where('todos.0.id', $newerTodo->id)
+        ->where('todos.1.id', $olderTodo->id),
+    );
+});
+
+test('GET /api/todos returns JSON list of todos wrapped in TodoResource', function () {
+    $todo = Todo::factory()->create([
+        'title' => 'Học Vue 3.5 + Axios REST API',
+        'completed' => false,
+    ]);
+
+    $this->getJson('/api/todos')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.id', $todo->id)
+        ->assertJsonPath('data.0.title', 'Học Vue 3.5 + Axios REST API')
+        ->assertJsonPath('data.0.completed', false)
+        ->assertJsonStructure([
+            'data' => [
+                ['id', 'title', 'completed', 'createdAt'],
+            ],
         ]);
+});
 
-    $response->assertRedirect(route('dashboard'));
+test('POST /api/todos creates a new todo item with trimmed title', function () {
+    $response = $this->postJson('/api/todos', [
+        'title' => '  Hoàn thiện 5-Layer Clean Architecture  ',
+    ]);
+
+    $response->assertCreated()
+        ->assertJsonPath('data.title', 'Hoàn thiện 5-Layer Clean Architecture')
+        ->assertJsonPath('data.completed', false);
 
     $this->assertDatabaseHas('todos', [
-        'user_id' => $user->id,
-        'title' => 'Học Vue 3 + Inertia v3',
+        'id' => $response->json('data.id'),
+        'title' => 'Hoàn thiện 5-Layer Clean Architecture',
         'completed' => false,
     ]);
 });
 
-test('todo title is required and cannot exceed 255 characters', function () {
-    $user = User::factory()->create();
+test('POST /api/todos returns 422 validation error when title is empty or exceeds 255 characters', function () {
+    $this->postJson('/api/todos', ['title' => ''])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['title']);
 
-    $this->actingAs($user)
-        ->post(route('todos.store'), ['title' => ''])
-        ->assertSessionHasErrors('title');
-
-    $this->actingAs($user)
-        ->post(route('todos.store'), ['title' => str_repeat('a', 256)])
-        ->assertSessionHasErrors('title');
+    $this->postJson('/api/todos', ['title' => str_repeat('a', 256)])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['title']);
 });
 
-test('authenticated user can toggle completed and update title of their todo', function () {
-    $user = User::factory()->create();
-    $todo = Todo::factory()->for($user)->create([
+test('PATCH /api/todos/{todo} toggles completed status and updates title', function () {
+    $todo = Todo::factory()->create([
         'title' => 'Công việc ban đầu',
         'completed' => false,
     ]);
 
-    $this->actingAs($user)
-        ->patch(route('todos.update', $todo), [
-            'completed' => true,
-            'title' => 'Công việc đã cập nhật',
-        ])
-        ->assertRedirect();
+    $this->patchJson("/api/todos/{$todo->id}", [
+        'title' => '  Công việc đã cập nhật  ',
+        'completed' => true,
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.id', $todo->id)
+        ->assertJsonPath('data.title', 'Công việc đã cập nhật')
+        ->assertJsonPath('data.completed', true);
 
     expect($todo->fresh())
-        ->completed->toBeTrue()
-        ->title->toBe('Công việc đã cập nhật');
+        ->title->toBe('Công việc đã cập nhật')
+        ->completed->toBeTrue();
 });
 
-test('authenticated user can delete their own todo', function () {
-    $user = User::factory()->create();
-    $todo = Todo::factory()->for($user)->create();
+test('PATCH /api/todos/{todo} returns 422 validation error when title is empty or exceeds 255 characters', function () {
+    $todo = Todo::factory()->create(['title' => 'Hợp lệ']);
 
-    $this->actingAs($user)
-        ->delete(route('todos.destroy', $todo))
-        ->assertRedirect();
+    $this->patchJson("/api/todos/{$todo->id}", ['title' => ''])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['title']);
 
-    $this->assertDatabaseMissing('todos', ['id' => $todo->id]);
+    $this->patchJson("/api/todos/{$todo->id}", ['title' => str_repeat('b', 256)])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['title']);
 });
 
-test('user cannot update or delete another users todo (anti-idor)', function () {
-    $owner = User::factory()->create();
-    $intruder = User::factory()->create();
-    $todo = Todo::factory()->for($owner)->create(['title' => 'Bí mật']);
+test('DELETE /api/todos/{todo} removes the todo item from database', function () {
+    $todo = Todo::factory()->create(['title' => 'Việc cần xóa']);
 
-    $this->actingAs($intruder)
-        ->patch(route('todos.update', $todo), ['title' => 'Hack'])
-        ->assertForbidden();
+    $this->deleteJson("/api/todos/{$todo->id}")
+        ->assertSuccessful();
 
-    $this->actingAs($intruder)
-        ->delete(route('todos.destroy', $todo))
-        ->assertForbidden();
-
-    $this->assertDatabaseHas('todos', [
+    $this->assertDatabaseMissing('todos', [
         'id' => $todo->id,
-        'title' => 'Bí mật',
     ]);
 });
 
-test('authenticated user can perform full crud via routes/api.php endpoints', function () {
-    $user = User::factory()->create();
-    $otherUser = User::factory()->create();
-    $otherTodo = Todo::factory()->for($otherUser)->create(['title' => 'Other']);
+test('PATCH and DELETE /api/todos/{todo} return 404 for non-existent todo', function () {
+    $this->patchJson('/api/todos/999999', [
+        'title' => 'Không tồn tại',
+        'completed' => true,
+    ])->assertNotFound();
 
-    // 1. POST /api/todos
-    $createResponse = $this->actingAs($user)
-        ->postJson('/api/todos', ['title' => 'Viết API bằng Axios'])
-        ->assertCreated();
-
-    $todoId = $createResponse->json('data.id');
-    expect($createResponse->json('data.title'))->toBe('Viết API bằng Axios');
-
-    // 2. GET /api/todos
-    $this->actingAs($user)
-        ->getJson('/api/todos')
-        ->assertOk()
-        ->assertJsonCount(1, 'data')
-        ->assertJsonPath('data.0.id', $todoId);
-
-    // 3. PATCH /api/todos/{todo}
-    $this->actingAs($user)
-        ->patchJson("/api/todos/{$todoId}", [
-            'title' => 'Đã cập nhật qua Axios',
-            'completed' => true,
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.title', 'Đã cập nhật qua Axios')
-        ->assertJsonPath('data.completed', true);
-
-    // 4. Anti-IDOR on /api/todos/{todo}
-    $this->actingAs($user)
-        ->patchJson("/api/todos/{$otherTodo->id}", ['title' => 'Hack'])
-        ->assertForbidden();
-
-    $this->actingAs($user)
-        ->deleteJson("/api/todos/{$otherTodo->id}")
-        ->assertForbidden();
-
-    // 5. DELETE /api/todos/{todo}
-    $this->actingAs($user)
-        ->deleteJson("/api/todos/{$todoId}")
-        ->assertOk();
-
-    $this->assertDatabaseMissing('todos', ['id' => $todoId]);
+    $this->deleteJson('/api/todos/999999')
+        ->assertNotFound();
 });

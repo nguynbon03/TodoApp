@@ -2,22 +2,17 @@
 
 namespace App\Http\Requests\Todos;
 
-use App\Models\Todo;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateTodoRequest extends FormRequest
 {
     /**
-     * Determine if the user is authorized to make this request (Anti-IDOR ownership check).
+     * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        $todo = $this->route('todo');
-
-        return $todo instanceof Todo
-            && $this->user() !== null
-            && $todo->user_id === $this->user()->id;
+        return true;
     }
 
     /**

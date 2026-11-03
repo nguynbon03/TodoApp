@@ -1,32 +1,32 @@
 # TodoApp — Laravel 13 + Vue 3.5 + Axios REST API (5-Layer Clean Architecture)
 
-Ứng dụng quản lý công việc (**TodoApp**) xây dựng theo kiến trúc **5-Layer Clean Architecture** kết hợp **Laravel 13**, **Vue 3.5 (`<script setup lang="ts">`)**, **Axios REST API** và **Tailwind CSS v4** — tối ưu trải nghiệm không tải lại trang (Zero-Reload SPA), bảo mật chống leo thang đặc quyền (**Anti-IDOR/BOLA**), và kiểm thử tự động **Pest v4**.
+Ứng dụng quản lý công việc (**TodoApp**) tinh gọn (Zero Starter-Kit Bloat), xây dựng theo kiến trúc **5-Layer Clean Architecture** kết hợp **Laravel 13**, **Vue 3.5 (`<script setup lang="ts">`)**, **Axios REST API** và **Tailwind CSS v4** — tối ưu trải nghiệm không tải lại trang (Zero-Reload SPA) và kiểm thử tự động **Pest v4**.
 
 - **Repository**: [https://github.com/nguynbon03/TodoApp](https://github.com/nguynbon03/TodoApp)
 
 ---
 
-## 1. Tổng Quan Kiến Trúc (5-Layer Clean Architecture)
+## 1. Tổng Quan Kiến Trúc (5-Layer Clean Architecture — Zero Boilerplate)
 
-Hệ thống được phân tách rõ ràng thành **5 tầng độc lập (Single Responsibility)**, giúp dễ đọc, dễ bảo trì và mở rộng cho cả Web lẫn Mobile App:
+Dự án đã được dọn sạch 100% các phần dư thừa của starter-kit (`User`, `Teams`, `Passkeys`, `TwoFactor`, `Settings`, `Sidebar`) để chỉ giữ lại đúng lõi **Todo App** phân tách thành **5 tầng độc lập (Single Responsibility)**:
 
 ```mermaid
 flowchart LR
     UI["1. Presentation UI\n(Dashboard.vue + useTodosApi.ts)"] -->|"Axios JSON + CSRF"| API["2. Routing & Controller\n(routes/api.php + TodoApiController)"]
-    API --> GUARD["3. Validation & Anti-IDOR\n(StoreTodoRequest / UpdateTodoRequest)"]
+    API --> GUARD["3. FormRequest Validation\n(StoreTodoRequest / UpdateTodoRequest)"]
     GUARD --> ACTION["4. Domain Actions\n(CreateTodo / UpdateTodo / DeleteTodo)"]
     ACTION --> DB[("SQLite / MySQL\n(todos table)")]
     ACTION --> RES["5. JSON Response Contract\n(TodoResource.php)"]
-    RES -->|"200 / 201 / 204 JSON"| UI
+    RES -->|"200 / 201 JSON"| UI
 ```
 
 | Tầng | Thành phần cốt lõi | Vai trò & Trách nhiệm |
 |---|---|---|
-| **1. Frontend (Vue 3.5 + Composable)** | [`resources/js/pages/Dashboard.vue`](resources/js/pages/Dashboard.vue)<br>[`resources/js/composables/useTodosApi.ts`](resources/js/composables/useTodosApi.ts) | Giao diện người dùng sử dụng `<script setup lang="ts">`, quản lý trạng thái 4-State FSM (`Idle -> Loading -> Success/Error`), bộ lọc (`Tất cả`, `Đang làm`, `Đã xong`), thống kê tiến độ và gọi REST API qua Axios. |
-| **2. Routing & Controller** | [`routes/api.php`](routes/api.php)<br>[`routes/web.php`](routes/web.php)<br>[`app/Http/Controllers/Api/TodoApiController.php`](app/Http/Controllers/Api/TodoApiController.php) | Định tuyến `GET/POST/PATCH/DELETE /api/todos` bọc trong middleware `web` + `auth` (bảo vệ bằng Session Cookie + `X-XSRF-TOKEN` CSRF) và render khung trang tại [`routes/web.php`](routes/web.php). |
-| **3. Validation & Anti-IDOR Guard** | [`app/Http/Requests/Todos/StoreTodoRequest.php`](app/Http/Requests/Todos/StoreTodoRequest.php)<br>[`app/Http/Requests/Todos/UpdateTodoRequest.php`](app/Http/Requests/Todos/UpdateTodoRequest.php) | Kiểm duyệt dữ liệu đầu vào (`title` bắt buộc, tối đa `255` ký tự) và **chặn lỗ hổng IDOR/BOLA** ngay tại `authorize()`: `$todo->user_id === $this->user()?->id` (trả `403 Forbidden` nếu sửa/xóa việc của người khác). |
+| **1. Frontend (Vue 3.5 + Composable)** | [`resources/js/pages/Dashboard.vue`](resources/js/pages/Dashboard.vue)<br>[`resources/js/composables/useTodosApi.ts`](resources/js/composables/useTodosApi.ts) | Giao diện người dùng sử dụng `<script setup lang="ts">`, quản lý trạng thái (`loading`, `submitting`, `errorMessage`), bộ lọc (`Tất cả`, `Đang làm`, `Đã xong`), thống kê tiến độ và gọi REST API qua Axios. |
+| **2. Routing & Controller** | [`routes/api.php`](routes/api.php)<br>[`routes/web.php`](routes/web.php)<br>[`app/Http/Controllers/DashboardController.php`](app/Http/Controllers/DashboardController.php)<br>[`app/Http/Controllers/Api/TodoApiController.php`](app/Http/Controllers/Api/TodoApiController.php) | Định tuyến `GET /` và `GET /dashboard` trả trang Inertia `Dashboard.vue`, cùng cụm REST API `GET/POST/PATCH/DELETE /api/todos`. |
+| **3. Validation (`FormRequest`)** | [`app/Http/Requests/Todos/StoreTodoRequest.php`](app/Http/Requests/Todos/StoreTodoRequest.php)<br>[`app/Http/Requests/Todos/UpdateTodoRequest.php`](app/Http/Requests/Todos/UpdateTodoRequest.php) | Kiểm duyệt dữ liệu đầu vào (`title` bắt buộc, kiểu chuỗi, tối đa `255` ký tự; `completed` kiểu boolean). Tự động trả `422 Unprocessable Entity` khi dữ liệu không hợp lệ. |
 | **4. Domain Actions** | [`app/Actions/Todos/CreateTodo.php`](app/Actions/Todos/CreateTodo.php)<br>[`app/Actions/Todos/UpdateTodo.php`](app/Actions/Todos/UpdateTodo.php)<br>[`app/Actions/Todos/DeleteTodo.php`](app/Actions/Todos/DeleteTodo.php) | Các class thực thi nghiệp vụ đơn nhiệm (Single-Action Classes), tách biệt hoàn toàn logic ghi/sửa/xóa Database khỏi Controller. |
-| **5. JSON Response Contract** | [`app/Http/Resources/TodoResource.php`](app/Http/Resources/TodoResource.php) | Chuẩn hóa cấu trúc JSON trả về (`id`, `title`, `is_completed`, `created_at`, `updated_at`), tuyệt đối không lộ khóa ngoại `user_id` ra phía trình duyệt. |
+| **5. JSON Response Contract** | [`app/Http/Resources/TodoResource.php`](app/Http/Resources/TodoResource.php) | Chuẩn hóa cấu trúc JSON trả về (`id`, `title`, `completed`, `createdAt`) thống nhất giữa `DashboardController` và `TodoApiController`. |
 
 ---
 
@@ -67,66 +67,63 @@ Khởi động toàn bộ hệ thống (PHP Server `:8000`, Queue Worker, Pail L
 composer run dev
 ```
 
-- Mở trình duyệt truy cập: **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
-- Đăng ký tài khoản mới tại `/register` hoặc đăng nhập tại `/login` để vào thẳng trang **Dashboard** (`/dashboard`) quản lý công việc.
+- Mở trình duyệt truy cập ngay: **[http://127.0.0.1:8000](http://127.0.0.1:8000)** (hoặc `/dashboard`) để sử dụng trực tiếp trang quản lý công việc (**Dashboard**).
 
 ---
 
-### Bước 4: Giải phẫu luồng hoạt động 7 trạm khi bấm `+ Thêm`
+### Bước 4: Giải phẫu luồng hoạt động khi bấm `+ Thêm`
 
-Khi bạn nhập tên công việc vào ô input và bấm nút **`+ Thêm`**, dữ liệu đi qua đúng **7 trạm kiểm soát chuẩn Clean Architecture** mà không cần tải lại trang:
+Khi bạn nhập tên công việc vào ô input và bấm nút **`+ Thêm`**, dữ liệu đi qua đúng **5 tầng Clean Architecture** mà không cần tải lại trang:
 
 ```mermaid
 sequenceDiagram
     actor User as Người dùng
     participant Vue as 1. Dashboard.vue (onCreateTodo)
     participant Api as 2. useTodosApi.ts (Axios POST /api/todos)
-    participant Route as 3. routes/api.php (auth + CSRF)
+    participant Req as 3. StoreTodoRequest (Validation)
     participant Ctrl as 4. TodoApiController::store()
-    participant Req as 5. StoreTodoRequest (Validation)
-    participant Act as 6. CreateTodo::handle()
-    participant Res as 7. TodoResource (201 Created JSON)
+    participant Act as 5. CreateTodo::handle()
+    participant Res as 6. TodoResource (201 Created JSON)
 
     User->>Vue: Nhập tiêu đề & bấm "+ Thêm"
     Vue->>Api: createTodo(newTodoTitle)
-    Api->>Route: POST /api/todos + Cookie + X-XSRF-TOKEN
-    Route->>Req: Kiểm tra đăng nhập & validate title (required|max:255)
-    Req->>Ctrl: Dữ liệu hợp lệ (validated)
-    Ctrl->>Act: $createTodo->handle($user, $title)
-    Act->>Ctrl: Trả về bản ghi Todo mới (is_completed = false)
-    Ctrl->>Res: TodoResource::make($todo)->response()->setStatusCode(201)
-    Res-->>Api: HTTP 201 { data: { id, title, is_completed, ... } }
+    Api->>Req: POST /api/todos { title }
+    Req->>Ctrl: Validate title (required|string|max:255)
+    Ctrl->>Act: $createTodo->handle($title)
+    Act->>Ctrl: Trả về bản ghi Todo mới (completed = false)
+    Ctrl->>Res: (new TodoResource($todo))->response()->setStatusCode(201)
+    Res-->>Api: HTTP 201 { data: { id, title, completed, createdAt } }
     Api-->>Vue: todos.value.unshift(created) (Cập nhật UI tức thì)
 ```
 
 1. **Trạm 1 (`onCreateTodo` tại [`Dashboard.vue`](resources/js/pages/Dashboard.vue))**: Bắt sự kiện `@submit.prevent="onCreateTodo"`, kiểm tra chuỗi không rỗng và khóa nút bấm (`submitting = true`) chống bấm đúp.
 2. **Trạm 2 (`createTodo` tại [`useTodosApi.ts`](resources/js/composables/useTodosApi.ts))**: Gửi request `axios.post('/api/todos', { title })` kèm header `Accept: application/json` và `X-Requested-With: XMLHttpRequest`.
-3. **Trạm 3 (Middleware tại [`routes/api.php`](routes/api.php))**: Xác thực phiên đăng nhập qua Session Cookie và kiểm tra `X-XSRF-TOKEN` chống tấn công CSRF.
-4. **Trạm 4 ([`StoreTodoRequest.php`](app/Http/Requests/Todos/StoreTodoRequest.php))**: Kiểm tra `authorize()` và luật `title: ['required', 'string', 'max:255']`. Nếu để trống hoặc quá 255 ký tự, trả ngay `422 Unprocessable Entity` kèm thông báo lỗi tiếng Việt.
-5. **Trạm 5 ([`TodoApiController.php`](app/Http/Controllers/Api/TodoApiController.php))**: Điều phối request đã hợp lệ sang tầng Action mà không ôm logic xử lý DB trong Controller.
-6. **Trạm 6 ([`CreateTodo.php`](app/Actions/Todos/CreateTodo.php))**: Tạo bản ghi mới thông qua quan hệ `$user->todos()->create(['title' => $title, 'is_completed' => false])`.
-7. **Trạm 7 ([`TodoResource.php`](app/Http/Resources/TodoResource.php))**: Đóng gói bản ghi thành chuẩn `{ data: { id, title, is_completed, created_at, updated_at } }` với mã `201 Created`, giúp Vue chèn ngay lên đầu danh sách (`todos.value.unshift(created)`).
+3. **Trạm 3 ([`StoreTodoRequest.php`](app/Http/Requests/Todos/StoreTodoRequest.php))**: Kiểm tra luật `title: ['required', 'string', 'max:255']`. Nếu để trống hoặc quá 255 ký tự, trả ngay `422 Unprocessable Entity`.
+4. **Trạm 4 ([`TodoApiController.php`](app/Http/Controllers/Api/TodoApiController.php))**: Điều phối request đã hợp lệ sang tầng Action mà không ôm logic xử lý DB trong Controller.
+5. **Trạm 5 ([`CreateTodo.php`](app/Actions/Todos/CreateTodo.php))**: Tạo bản ghi mới `Todo::query()->create(['title' => trim($title), 'completed' => false])`.
+6. **Trạm 6 ([`TodoResource.php`](app/Http/Resources/TodoResource.php))**: Đóng gói bản ghi thành chuẩn `{ data: { id, title, completed, createdAt } }` với mã `201 Created`, giúp Vue chèn ngay lên đầu danh sách (`todos.value.unshift(created)`).
 
 ---
 
 ### Bước 5: Chạy bộ kiểm thử tự động Pest & Kiểm tra kiểu TypeScript
 
-Dự án đi kèm bộ kiểm thử tự động bao phủ toàn bộ luồng CRUD, Validation và chống leo thang đặc quyền (Anti-IDOR):
+Dự án đi kèm bộ kiểm thử tự động bao phủ toàn bộ luồng CRUD, Validation (`422`) và xử lý không tìm thấy bản ghi (`404`):
 
 ```bash
-# 1. Chạy 15 kịch bản kiểm thử Feature cho TodoApp (15/15 PASS, 99 assertions)
+# 1. Chạy kịch bản kiểm thử Feature cho TodoApp
 php artisan test --compact tests/Feature/TodoCrudTest.php
 
-# 2. Kiểm tra tính toàn vẹn kiểu dữ liệu TypeScript trên toàn bộ Frontend Vue
-npx vue-tsc --noEmit
+# 2. Kiểm tra chuẩn code PHP Pint & toàn vẹn kiểu dữ liệu TypeScript / Oxlint
+composer lint:check
+npm run check
 ```
 
 **Danh mục kiểm thử trong [`tests/Feature/TodoCrudTest.php`](tests/Feature/TodoCrudTest.php)**:
-- Chặn người dùng chưa đăng nhập (`302 Redirect` trên Web, `401 Unauthorized` trên `/api/todos`).
-- Hiển thị đúng danh sách công việc của chính người dùng đang đăng nhập (cô lập dữ liệu đa người dùng).
-- Tạo mới, đổi trạng thái hoàn thành (`is_completed`), sửa tiêu đề và xóa công việc qua cả REST API (`/api/todos`) lẫn Web/Inertia (`/todos`).
-- Kiểm tra lỗi `422` khi tiêu đề rỗng hoặc vượt quá 255 ký tự.
-- Kiểm tra bảo mật **Anti-IDOR (`403 Forbidden`)** khi người dùng A cố tình gửi `PATCH` hoặc `DELETE` vào ID công việc của người dùng B.
+- Hiển thị trang `Dashboard` tại cả `GET /` và `GET /dashboard` kèm danh sách công việc sắp xếp mới nhất.
+- Lấy danh sách công việc qua `GET /api/todos` theo chuẩn `TodoResource`.
+- Tạo mới (`POST /api/todos`), đổi trạng thái hoàn thành (`completed`), sửa tiêu đề (`PATCH /api/todos/{todo}`) và xóa công việc (`DELETE /api/todos/{todo}`).
+- Kiểm tra lỗi `422 Unprocessable Entity` khi tiêu đề rỗng hoặc vượt quá 255 ký tự.
+- Kiểm tra lỗi `404 Not Found` khi cập nhật hoặc xóa ID công việc không tồn tại.
 
 ---
 
